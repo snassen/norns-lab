@@ -1,0 +1,6 @@
+{
+  "norns": "42df84420774ef4d0961cf37946ed30e4078920f",
+  "awake": "73d4accfc090aaab58f1586eaf4d9cf54d3cff01",
+  "base": "ubuntu:22.04",
+  "architecture": "linux/arm64"
+}

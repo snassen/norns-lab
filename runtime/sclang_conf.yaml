@@ -1,0 +1,7 @@
+includePaths:
+  - /home/we/norns/sc/core
+  - /home/we/norns/sc/engines
+  - /home/we/dust
+excludePaths: []
+postInlineWarnings: false
+excludeDefaultPaths: false
