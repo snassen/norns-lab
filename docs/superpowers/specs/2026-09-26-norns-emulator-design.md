@@ -18,9 +18,11 @@ The browser and automated runner speak one backend-neutral protocol:
 | --- | --- | --- |
 | Backend → client | `frame` | Native norns framebuffer, 128 × 64 pixels, plus sequence number and time. |
 | Backend → client | `status` | Runtime, script, and engine readiness or a structured error. |
+| Backend → client | `state` | Read-only diagnostic state for the current reference script. |
 | Client → backend | `key` | K1–K3 press/release, preserving hold duration. |
 | Client → backend | `encoder` | E1–E3 signed delta. |
 | Client → backend | `load` | Load a script from the isolated development script directory. |
+| Client → backend | `inspect` | Request the reference script's current diagnostic state. |
 
 The frame source must be norns' rendered framebuffer, not a second implementation of the `screen` Lua API. Current upstream already provides `_norns.screen_export_png` for the native Cairo framebuffer and OSC `/remote/key` and `/remote/enc` routes through norns input handling. Use those existing interfaces first; add a native adapter only if measurement shows they cannot meet the interactive target. The gateway listens on localhost by default. A future Pi OS or physical-shield backend can implement this protocol without replacing the UI or test scenarios.
 

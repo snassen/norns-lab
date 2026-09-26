@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Norns Lab</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Norns Lab</h1>
+      <p id="status">Connecting…</p>
+    </header>
+    <section class="device" aria-label="Virtual norns">
+      <div class="screen"><img id="screen" width="128" height="64" alt="Norns screen"></div>
+      <div class="encoders">
+        <button data-encoder="1" aria-label="Encoder 1">E1</button>
+        <button data-encoder="2" aria-label="Encoder 2">E2</button>
+        <button data-encoder="3" aria-label="Encoder 3">E3</button>
+      </div>
+      <div class="keys">
+        <button data-key="1">K1</button>
+        <button data-key="2">K2</button>
+        <button data-key="3">K3</button>
+      </div>
+    </section>
+    <div class="toolbar"><button id="load">Load Awake</button><span>Scroll an encoder to turn it. Hold a key for combinations.</span></div>
+    <p id="error" role="alert"></p>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

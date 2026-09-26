@@ -1,0 +1,143 @@
+import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import readline from 'node:readline';
+
+const pngHeader = Buffer.from('89504e470d0a1a0a', 'hex');
+const pngEnd = Buffer.from('0000000049454e44ae426082', 'hex');
+const completePng = data => data?.length >= 36
+  && data.subarray(0, 8).equals(pngHeader)
+  && data.subarray(-12).equals(pngEnd);
+
+export class Runtime extends EventEmitter {
+  constructor({ command = 'docker', args, frameDir, containerFrameDir = '/frames', startupTimeoutMs = 30000 } = {}) {
+    super();
+    if (!frameDir) throw new Error('frameDir is required');
+    this.command = command;
+    this.args = args ?? ['run', '-i', '--rm', '-p', '10111:10111/udp', '-v', `${frameDir}:/frames`, 'norns-lab-runtime'];
+    this.frameDir = frameDir;
+    this.containerFrameDir = containerFrameDir;
+    this.startupTimeoutMs = startupTimeoutMs;
+    this.child = null;
+    this.lines = [];
+    this.sequence = 0;
+    this.probeSequence = 0;
+    this.ready = false;
+    this.stopping = false;
+  }
+
+  async start() {
+    if (this.child) throw new Error('Runtime already started');
+    await fs.mkdir(this.frameDir, { recursive: true });
+    this.stopping = false;
+    this.ready = false;
+    this.child = spawn(this.command, this.args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child.on('close', code => {
+      if (this.ready && !this.stopping) {
+        this.emit('status', { state: 'failed', error: `Runtime exited (code ${code})` });
+      }
+    });
+    for (const stream of [this.child.stdout, this.child.stderr]) {
+      readline.createInterface({ input: stream }).on('line', line => {
+        this.lines.push(line);
+        if (this.lines.length > 2000) this.lines.shift();
+        this.emit('line', line);
+      });
+    }
+    try {
+      await this.waitForLine(line => line.includes('NORN_LAB_READY'), this.startupTimeoutMs, 0);
+      this.ready = true;
+      this.emit('status', { state: 'ready' });
+    } catch (error) {
+      this.emit('status', { state: 'failed', error: error.message });
+      throw error;
+    }
+  }
+
+  waitForLine(predicate, timeoutMs, startIndex = this.lines.length) {
+    return new Promise((resolve, reject) => {
+      for (const line of this.lines.slice(startIndex)) {
+        if (predicate(line)) return resolve(line);
+      }
+      const timer = setTimeout(() => finish(new Error('Runtime readiness timeout')), timeoutMs);
+      const onLine = line => { if (predicate(line)) finish(null, line); };
+      const onClose = code => finish(new Error(`Runtime exited before response (code ${code})`));
+      const onError = error => finish(error);
+      const finish = (error, result) => {
+        clearTimeout(timer);
+        this.off('line', onLine);
+        this.child?.off('close', onClose);
+        this.child?.off('error', onError);
+        error ? reject(error) : resolve(result);
+      };
+      this.on('line', onLine);
+      this.child?.once('close', onClose);
+      this.child?.once('error', onError);
+    });
+  }
+
+  sendLua(code) {
+    if (!this.child || this.child.exitCode !== null || !this.child.stdin.writable) {
+      throw new Error('Runtime is not running');
+    }
+    this.child.stdin.write(`${code}\n`);
+  }
+
+  async loadAwake() {
+    const startIndex = this.lines.length;
+    this.sendLua("norns.script.load('/home/we/dust/code/awake/awake.lua')");
+    await this.waitForLine(line => line.includes('# script init'), 30000, startIndex);
+    this.emit('status', { state: 'script-ready', script: 'awake' });
+  }
+
+  async captureFrame({ timeoutMs = 3000 } = {}) {
+    const sequence = ++this.sequence;
+    const filename = `frame-${String(sequence).padStart(6, '0')}.png`;
+    const hostPath = path.join(this.frameDir, filename);
+    const runtimePath = path.posix.join(this.containerFrameDir, filename);
+    this.sendLua(`_norns.screen_export_png(${JSON.stringify(runtimePath)})`);
+    const deadline = Date.now() + timeoutMs;
+    let data;
+    while (Date.now() < deadline) {
+      try {
+        data = await fs.readFile(hostPath);
+        if (completePng(data)) break;
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    if (!completePng(data)) {
+      throw new Error(`Frame ${sequence} export timeout`);
+    }
+    const width = data.readUInt32BE(16);
+    const height = data.readUInt32BE(20);
+    if (width !== 128 || height !== 64) throw new Error(`Unexpected frame size ${width}×${height}`);
+    return { sequence, path: hostPath, width, height, time: new Date().toISOString() };
+  }
+
+  async probeAwake() {
+    const marker = `__NL_STATE_${++this.probeSequence}:`;
+    const startIndex = this.lines.length;
+    this.sendLua(`print("${marker}"..tostring(mode)..":"..tostring(edit_ch))`);
+    const line = await this.waitForLine(value => value.includes(marker), 3000, startIndex);
+    const match = line.match(new RegExp(`${marker}(\\d+):(\\d+)`));
+    if (!match) throw new Error(`Invalid Awake state response: ${line}`);
+    return { mode: Number(match[1]), edit_ch: Number(match[2]) };
+  }
+
+  async stop() {
+    if (!this.child) return;
+    const child = this.child;
+    this.child = null;
+    this.stopping = true;
+    if (child.exitCode !== null) return;
+    const closed = new Promise(resolve => child.once('close', () => resolve(true)));
+    child.kill('SIGTERM');
+    let timer;
+    const exited = await Promise.race([closed, new Promise(resolve => { timer = setTimeout(() => resolve(false), 1500); })]);
+    clearTimeout(timer);
+    if (!exited && child.exitCode === null) child.kill('SIGKILL');
+  }
+}

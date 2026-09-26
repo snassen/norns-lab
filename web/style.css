@@ -1,0 +1,17 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #191b1c; color: #e7e6e1; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+main { width: min(92vw, 760px); }
+header { display: flex; align-items: baseline; gap: 1rem; }
+h1 { font-size: 1.2rem; font-weight: 600; }
+#status { color: #9aa1a1; }
+.device { padding: 2.5rem; border-radius: 2rem; background: #363b3d; box-shadow: 0 1.5rem 3rem #0007; }
+.screen { aspect-ratio: 2; background: #080a0b; border: .5rem solid #111; border-radius: .4rem; display: grid; place-items: center; overflow: hidden; }
+.screen img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.encoders, .keys { display: flex; justify-content: space-around; margin-top: 2rem; }
+button { cursor: pointer; font: inherit; color: inherit; background: #555d60; border: 1px solid #71797c; border-radius: 999px; min-width: 4rem; min-height: 4rem; }
+button:active, button.pressed { background: #a7adb0; color: #101213; transform: translateY(2px); }
+.keys button { min-height: 2.5rem; border-radius: .4rem; }
+.toolbar { display: flex; align-items: center; gap: 1rem; margin-top: 1.5rem; }
+.toolbar button { min-height: 2.8rem; padding: 0 1rem; border-radius: .5rem; }
+.toolbar span { color: #aeb4b4; font-size: .9rem; }
+#error { color: #ff9b9b; min-height: 1.5rem; }
