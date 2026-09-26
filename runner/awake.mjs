@@ -1,5 +1,4 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
@@ -41,7 +40,7 @@ function inbox(ws) {
   };
 }
 
-export async function runAwakeScenario({ runtime, artifactRoot = path.join(root, 'artifacts'), controlPort = 10111 } = {}) {
+export async function runAwakeScenario({ runtime, artifactRoot = path.join(root, 'artifacts') } = {}) {
   const runId = new Date().toISOString().replaceAll(/[:.]/g, '-');
   const artifactDir = path.join(artifactRoot, runId);
   await fs.mkdir(artifactDir, { recursive: true });
@@ -51,7 +50,7 @@ export async function runAwakeScenario({ runtime, artifactRoot = path.join(root,
   try {
     report.versions = JSON.parse(await fs.readFile(path.join(root, 'runtime/versions.json'), 'utf8'));
     await runtime.start();
-    app = createAppServer({ runtime, frameDir: runtime.frameDir, controlPort, frameIntervalMs: 150 });
+    app = createAppServer({ runtime, frameDir: runtime.frameDir, frameIntervalMs: 150 });
     const address = await app.listen(0);
     ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
     await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
@@ -88,6 +87,7 @@ export async function runAwakeScenario({ runtime, artifactRoot = path.join(root,
     };
 
     const loadSince = received.length;
+    const loadLogIndex = runtime.lines.length;
     send({ type: 'load', script: 'awake' });
     await received.waitFor(message => message.type === 'status' && message.state === 'script-ready', loadSince, 35000);
     const states = [];
@@ -104,6 +104,8 @@ export async function runAwakeScenario({ runtime, artifactRoot = path.join(root,
     states.push(await waitState(state => state.mode === 1 && state.edit_ch === 2));
     await saveFrame(sequence);
     assertAwakeStates(states);
+    const runtimeError = runtime.lines.slice(loadLogIndex).find(line => /### SCRIPT ERROR|ERROR:/.test(line));
+    if (runtimeError) throw new Error(`Awake runtime error: ${runtimeError}`);
     report.result = 'passed';
   } catch (error) {
     report.error = error.message;
@@ -120,7 +122,11 @@ export async function runAwakeScenario({ runtime, artifactRoot = path.join(root,
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const frameDir = await fs.mkdtemp(path.join(os.tmpdir(), 'norns-lab-run-'));
+  const frameRoot = path.join(root, 'artifacts');
+  await fs.mkdir(frameRoot, { recursive: true });
+  // Colima shares /Users with macOS, whereas a bind source in /var/folders
+  // resolves only inside the Linux VM and its PNGs never reach this process.
+  const frameDir = await fs.mkdtemp(path.join(frameRoot, 'runtime-frames-'));
   try {
     const result = await runAwakeScenario({ runtime: new Runtime({ frameDir }) });
     console.log(`Awake verification passed: ${result.artifactDir}`);

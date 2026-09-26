@@ -1,17 +1,15 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { parseClientMessage } from './protocol.js';
-import { sendControl } from './osc.js';
 import { Runtime } from './runtime.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(here, '../web');
 
-export function createAppServer({ runtime, frameDir, controlPort = 10111, frameIntervalMs = 200 }) {
+export function createAppServer({ runtime, frameDir, frameIntervalMs = 200 }) {
   let scriptReady = false;
   let capturing = false;
   const clients = new Set();
@@ -64,7 +62,7 @@ export function createAppServer({ runtime, frameDir, controlPort = 10111, frameI
         } else if (message.type === 'inspect') {
           client.send(JSON.stringify({ type: 'state', ...await runtime.probeAwake() }));
         } else {
-          await sendControl(message, { port: controlPort });
+          runtime.sendControl(message);
         }
       } catch (error) {
         client.send(JSON.stringify({ type: 'error', message: error.message }));
@@ -99,7 +97,9 @@ export function createAppServer({ runtime, frameDir, controlPort = 10111, frameI
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const frameDir = await fs.mkdtemp(path.join(os.tmpdir(), 'norns-lab-'));
+  const frameRoot = path.resolve(here, '../artifacts');
+  await fs.mkdir(frameRoot, { recursive: true });
+  const frameDir = await fs.mkdtemp(path.join(frameRoot, 'runtime-frames-'));
   const runtime = new Runtime({ frameDir });
   let app;
   const shutdown = async () => {

@@ -24,7 +24,7 @@ The browser and automated runner speak one backend-neutral protocol:
 | Client → backend | `load` | Load a script from the isolated development script directory. |
 | Client → backend | `inspect` | Request the reference script's current diagnostic state. |
 
-The frame source must be norns' rendered framebuffer, not a second implementation of the `screen` Lua API. Current upstream already provides `_norns.screen_export_png` for the native Cairo framebuffer and OSC `/remote/key` and `/remote/enc` routes through norns input handling. Use those existing interfaces first; add a native adapter only if measurement shows they cannot meet the interactive target. The gateway listens on localhost by default. A future Pi OS or physical-shield backend can implement this protocol without replacing the UI or test scenarios.
+The frame source must be norns' rendered framebuffer, not a second implementation of the `screen` Lua API. Current upstream provides `_norns.screen_export_png` for the native Cairo framebuffer. It also provides OSC `/remote/key` and `/remote/enc`, but Colima does not forward this UDP port to macOS on this host. The first backend therefore uses norns' existing stdin Lua console to invoke `_norns.key` and the active `norns.encoders.callback` with normalized encoder steps. These callbacks dispatch into the real script and retain key hold behavior. The gateway listens on localhost by default. A future Pi OS or physical-shield backend can implement this protocol without replacing the UI or test scenarios.
 
 ## First milestone behavior
 

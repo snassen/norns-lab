@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -15,7 +16,8 @@ export class Runtime extends EventEmitter {
     super();
     if (!frameDir) throw new Error('frameDir is required');
     this.command = command;
-    this.args = args ?? ['run', '-i', '--rm', '-p', '10111:10111/udp', '-v', `${frameDir}:/frames`, 'norns-lab-runtime'];
+    this.containerName = args ? null : `norns-lab-${randomUUID()}`;
+    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', '-v', `${frameDir}:/frames`, 'norns-lab-runtime'];
     this.frameDir = frameDir;
     this.containerFrameDir = containerFrameDir;
     this.startupTimeoutMs = startupTimeoutMs;
@@ -84,6 +86,12 @@ export class Runtime extends EventEmitter {
     this.child.stdin.write(`${code}\n`);
   }
 
+  sendControl(message) {
+    if (message.type === 'key') this.sendLua(`_norns.key(${message.n},${message.z})`);
+    else if (message.type === 'encoder') this.sendLua(`norns.encoders.callback(${message.n},${message.delta})`);
+    else throw new Error('Unsupported norns control');
+  }
+
   async loadAwake() {
     const startIndex = this.lines.length;
     this.sendLua("norns.script.load('/home/we/dust/code/awake/awake.lua')");
@@ -120,7 +128,9 @@ export class Runtime extends EventEmitter {
   async probeAwake() {
     const marker = `__NL_STATE_${++this.probeSequence}:`;
     const startIndex = this.lines.length;
-    this.sendLua(`print("${marker}"..tostring(mode)..":"..tostring(edit_ch))`);
+    // Awake keeps edit_ch local to its script. Read the captured value from its
+    // real key handler, leaving the reference script and its state untouched.
+    this.sendLua(`local __nl_ch=nil; for __nl_i=1,32 do local __nl_name,__nl_value=debug.getupvalue(key,__nl_i); if __nl_name=="edit_ch" then __nl_ch=__nl_value; break end end; print("${marker}"..tostring(mode)..":"..tostring(__nl_ch))`);
     const line = await this.waitForLine(value => value.includes(marker), 3000, startIndex);
     const match = line.match(new RegExp(`${marker}(\\d+):(\\d+)`));
     if (!match) throw new Error(`Invalid Awake state response: ${line}`);
@@ -132,6 +142,15 @@ export class Runtime extends EventEmitter {
     const child = this.child;
     this.child = null;
     this.stopping = true;
+    if (this.containerName) {
+      // Stopping the Docker CLI alone can leave its container running. Remove
+      // the named instance so subsequent runs start from a clean state.
+      await new Promise(resolve => {
+        const cleanup = spawn(this.command, ['rm', '-f', this.containerName], { stdio: 'ignore' });
+        cleanup.once('error', resolve);
+        cleanup.once('close', resolve);
+      });
+    }
     if (child.exitCode !== null) return;
     const closed = new Promise(resolve => child.once('close', () => resolve(true)));
     child.kill('SIGTERM');

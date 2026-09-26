@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import dgram from 'node:dgram';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,23 +30,15 @@ test('rejects frame traffic without actual Awake state changes', () => {
 
 test('runs Awake controls unattended and saves trace, frames and logs', async () => {
   const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'norns-lab-runner-'));
-  const reservation = dgram.createSocket('udp4');
-  await new Promise(resolve => reservation.bind(0, '127.0.0.1', resolve));
-  const controlPort = reservation.address().port;
-  reservation.close();
-  const prior = process.env.FAKE_CONTROL_PORT;
-  process.env.FAKE_CONTROL_PORT = String(controlPort);
   try {
     const runtime = new Runtime({ command: process.execPath, args: [fixture], frameDir: path.join(scratch, 'frames'), containerFrameDir: path.join(scratch, 'frames'), startupTimeoutMs: 1000 });
-    const { artifactDir, report } = await runAwakeScenario({ runtime, artifactRoot: path.join(scratch, 'artifacts'), controlPort });
+    const { artifactDir, report } = await runAwakeScenario({ runtime, artifactRoot: path.join(scratch, 'artifacts') });
     assert.equal(report.result, 'passed');
     assert.equal(report.frames.length, 3);
     assert.deepEqual(report.states.filter((state, i, all) => i === 0 || state.mode !== all[i - 1].mode || state.edit_ch !== all[i - 1].edit_ch).map(({ mode, edit_ch }) => [mode, edit_ch]), [[1, 1], [2, 1], [1, 1], [1, 2]]);
     assert.equal((await fs.readFile(path.join(artifactDir, 'report.json'), 'utf8')).includes('"result": "passed"'), true);
     assert.equal((await fs.readFile(path.join(artifactDir, 'runtime.log'), 'utf8')).includes('# script init'), true);
   } finally {
-    if (prior === undefined) delete process.env.FAKE_CONTROL_PORT;
-    else process.env.FAKE_CONTROL_PORT = prior;
     await fs.rm(scratch, { recursive: true, force: true });
   }
 });
