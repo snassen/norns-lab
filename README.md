@@ -33,6 +33,12 @@ After the image is built, run `npm start` and open the printed `http://127.0.0.1
 
 By default Onward is mounted from `../onward-norns` without write access. Set `NORN_LAB_ONWARD_DIR` to another absolute source folder if needed. The test note is synthetic; live microphone or instrument input is not yet connected to the browser.
 
+## Start and stop on macOS
+
+Run `./scripts/install-mac-launcher.sh` once to install **Norns Lab** in `~/Applications`, then open it from Finder or Spotlight. Its menu bar item shows **● Norns Lab** while the emulator is running and **○ Norns Lab** while it is stopped. The menu has **Start and Open**, **Open Browser**, **Stop Emulator**, and **Stop and Quit**. It also recognizes a Norns Lab instance started from Terminal or Codex. The launcher writes its own startup log to `~/Library/Logs/NornsLab.log`.
+
+From a terminal, use `npm run stop` to stop the server and its Docker container cleanly. If you started Norns Lab in a terminal, Ctrl+C does the same. Stopping browser audio alone only mutes playback in that browser tab.
+
 ## Source and scope
 
 Pinned revisions are in [runtime/versions.json](runtime/versions.json). The image fetches upstream [norns](https://github.com/monome/norns) and [Awake](https://github.com/tehn/awake) at build time. Awake stays unmodified. The ARM64 build compatibility patch is in `runtime/patches/`.
