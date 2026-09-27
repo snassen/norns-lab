@@ -17,8 +17,12 @@ export function parseClientMessage(raw) {
     && message.delta !== 0 && Math.abs(message.delta) <= 64) {
     return { type: 'encoder', n: message.n, delta: message.delta };
   }
-  if (message.type === 'load' && message.script === 'awake') {
-    return { type: 'load', script: 'awake' };
+  if (message.type === 'load' && (message.script === 'awake' || message.script === 'onward')) {
+    return { type: 'load', script: message.script };
+  }
+  if (message.type === 'test-tone') return { type: 'test-tone' };
+  if (message.type === 'matron' && typeof message.code === 'string' && message.code.length > 0 && message.code.length <= 4096 && !/[\r\n]/.test(message.code)) {
+    return { type: 'matron', code: message.code };
   }
   if (message.type === 'audio' && typeof message.enabled === 'boolean') {
     return { type: 'audio', enabled: message.enabled };

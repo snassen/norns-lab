@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test tests/*.test.js",
-    "verify:awake": "node runner/awake.mjs"
+    "verify:awake": "node runner/awake.mjs",
+    "verify:onward": "node runner/onward.mjs"
   },
   "dependencies": {
     "ws": "^8.18.3"

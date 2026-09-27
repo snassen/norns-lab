@@ -3,6 +3,9 @@ import { createWheelStepper } from './encoder-wheel.js';
 const status = document.querySelector('#status');
 const error = document.querySelector('#error');
 const screen = document.querySelector('#screen');
+const scriptSelect = document.querySelector('#script');
+const matronCode = document.querySelector('#matron-code');
+const matronLog = document.querySelector('#matron-log');
 const ws = new WebSocket(`ws://${location.host}`);
 ws.binaryType = 'arraybuffer';
 const heldKeys = new Set();
@@ -37,12 +40,22 @@ ws.addEventListener('message', event => {
     return;
   }
   const message = JSON.parse(event.data);
-  if (message.type === 'status') status.textContent = message.state === 'failed' ? `Failed: ${message.error}` : message.state;
+  if (message.type === 'status') status.textContent = message.state === 'failed' ? `Failed: ${message.error}` : message.script ? `${message.script} ready` : message.state;
   if (message.type === 'audio-status') {
     audioSourceConnected = message.connected;
     if (audioContext && !message.connected) audioStatus.textContent = message.error ? `Audio error: ${message.error}` : 'Waiting for norns audio…';
   }
-  if (message.type === 'error') error.textContent = message.message;
+  if (message.type === 'error') {
+    error.textContent = message.message;
+    document.querySelector('#test-tone').disabled = false;
+  }
+  if (message.type === 'matron-log') {
+    const lines = matronLog.textContent ? matronLog.textContent.split('\n').slice(-119) : [];
+    lines.push(message.line);
+    matronLog.textContent = lines.join('\n');
+    matronLog.scrollTop = matronLog.scrollHeight;
+  }
+  if (message.type === 'test-tone') document.querySelector('#test-tone').disabled = false;
   if (message.type === 'frame') screen.src = `${message.url}?seq=${message.sequence}`;
 });
 
@@ -76,7 +89,21 @@ audioButton.addEventListener('click', async () => {
 
 document.querySelector('#load').addEventListener('click', () => {
   error.textContent = '';
-  send({ type: 'load', script: 'awake' });
+  send({ type: 'load', script: scriptSelect.value });
+});
+
+document.querySelector('#test-tone').addEventListener('click', event => {
+  error.textContent = '';
+  event.currentTarget.disabled = true;
+  send({ type: 'test-tone' });
+});
+
+document.querySelector('#matron-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const code = matronCode.value.trim();
+  if (!code) return;
+  send({ type: 'matron', code });
+  matronCode.value = '';
 });
 
 for (const button of document.querySelectorAll('[data-key]')) {

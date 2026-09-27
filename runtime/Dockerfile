@@ -44,11 +44,13 @@ RUN git clone https://github.com/tehn/awake.git /home/we/dust/code/awake \
 COPY --chown=we:we runtime/matronrc.lua /home/we/matronrc.lua
 COPY --chown=we:we runtime/sclang_conf.yaml /home/we/.config/SuperCollider/sclang_conf.yaml
 COPY --chown=we:we runtime/entrypoint.sh /usr/local/bin/norns-lab-runtime
+COPY --chown=we:we runtime/test-tone.c /tmp/norns-lab-test-tone.c
 COPY --chown=we:we runtime/versions.json /opt/norns-lab/versions.json
 COPY --chown=we:we runtime/patches/arm64-build.patch /opt/norns-lab/arm64-build.patch
-RUN chmod +x /usr/local/bin/norns-lab-runtime
+USER root
+RUN chmod +x /usr/local/bin/norns-lab-runtime \
+    && cc -O2 -Wall -Wextra /tmp/norns-lab-test-tone.c -o /usr/local/bin/norns-lab-tone -ljack -lm
 
 ENV HOME=/home/we
-USER root
 EXPOSE 10111/udp
 ENTRYPOINT ["/usr/local/bin/norns-lab-runtime"]

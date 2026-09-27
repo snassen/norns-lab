@@ -9,9 +9,11 @@ import { AudioBridge } from './audio-bridge.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(here, '../web');
+const defaultOnwardDir = path.resolve(here, '../../onward-norns');
 
 export function createAppServer({ runtime, frameDir, audioBridge, frameIntervalMs = 200 }) {
   let scriptReady = false;
+  let currentScript;
   let capturing = false;
   const clients = new Set();
   const broadcast = message => {
@@ -50,6 +52,10 @@ export function createAppServer({ runtime, frameDir, audioBridge, frameIntervalM
     }
   });
   runtime.on('status', status => broadcast({ type: 'status', ...status }));
+  runtime.on('line', line => {
+    if (!line.trim() || line === '<ok>' || line.startsWith('Cannot lock down ')) return;
+    broadcast({ type: 'matron-log', line });
+  });
   audioBridge?.on('status', status => broadcast({ type: 'audio-status', ...status }));
   audioBridge?.on('pcm', chunk => {
     for (const client of clients) {
@@ -60,20 +66,27 @@ export function createAppServer({ runtime, frameDir, audioBridge, frameIntervalM
   });
   wss.on('connection', client => {
     clients.add(client);
-    client.send(JSON.stringify({ type: 'status', state: scriptReady ? 'script-ready' : 'ready' }));
+    client.send(JSON.stringify({ type: 'status', state: scriptReady ? 'script-ready' : 'ready', ...(scriptReady ? { script: currentScript } : {}) }));
     client.send(JSON.stringify({ type: 'audio-status', connected: Boolean(audioBridge?.source) }));
     client.on('close', () => clients.delete(client));
     client.on('message', async raw => {
       try {
         const message = parseClientMessage(raw);
         if (message.type === 'load') {
-          await runtime.loadAwake();
+          scriptReady = false;
+          await runtime.loadScript(message.script);
           scriptReady = true;
+          currentScript = message.script;
         } else if (message.type === 'inspect') {
           client.send(JSON.stringify({ type: 'state', ...await runtime.probeAwake() }));
         } else if (message.type === 'audio') {
           client.audioEnabled = message.enabled;
           client.send(JSON.stringify({ type: 'audio-subscription', enabled: message.enabled }));
+        } else if (message.type === 'matron') {
+          runtime.sendLua(message.code);
+        } else if (message.type === 'test-tone') {
+          await runtime.playTestTone();
+          client.send(JSON.stringify({ type: 'test-tone', state: 'done' }));
         } else {
           runtime.sendControl(message);
         }
@@ -126,7 +139,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.once('SIGTERM', shutdown);
   try {
     const audioAddress = await audioBridge.listen(0);
-    runtime = new Runtime({ frameDir, audioPort: audioAddress.port });
+    const onwardDir = process.env.NORN_LAB_ONWARD_DIR || defaultOnwardDir;
+    const onwardAvailable = await Promise.all([
+      fs.access(path.join(onwardDir, 'onward_norns.lua')),
+      fs.access(path.join(onwardDir, 'lib/Engine_OnwardGrain.sc'))
+    ]).then(() => true, () => false);
+    runtime = new Runtime({ frameDir, audioPort: audioAddress.port, onwardDir: onwardAvailable ? onwardDir : undefined });
     await runtime.start();
     app = createAppServer({ runtime, frameDir, audioBridge });
     const address = await app.listen();

@@ -12,13 +12,14 @@ const completePng = data => data?.length >= 36
   && data.subarray(-12).equals(pngEnd);
 
 export class Runtime extends EventEmitter {
-  constructor({ command = 'docker', args, frameDir, containerFrameDir = '/frames', startupTimeoutMs = 30000, audioPort = 0 } = {}) {
+  constructor({ command = 'docker', args, frameDir, containerFrameDir = '/frames', startupTimeoutMs = 30000, audioPort = 0, onwardDir } = {}) {
     super();
     if (!frameDir) throw new Error('frameDir is required');
     if (!Number.isInteger(audioPort) || audioPort < 0 || audioPort > 65535) throw new Error('Invalid audio receiver port');
     this.command = command;
+    this.onwardDir = onwardDir;
     this.containerName = args ? null : `norns-lab-${randomUUID()}`;
-    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', '-e', `NORN_LAB_AUDIO_PORT=${audioPort}`, '-v', `${frameDir}:/frames`, 'norns-lab-runtime'];
+    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', '-e', `NORN_LAB_AUDIO_PORT=${audioPort}`, '-v', `${frameDir}:/frames`, ...(onwardDir ? ['-v', `${onwardDir}:/home/we/dust/code/onward_norns:ro`] : []), 'norns-lab-runtime'];
     this.frameDir = frameDir;
     this.containerFrameDir = containerFrameDir;
     this.startupTimeoutMs = startupTimeoutMs;
@@ -93,11 +94,32 @@ export class Runtime extends EventEmitter {
     else throw new Error('Unsupported norns control');
   }
 
-  async loadAwake() {
+  async loadScript(script) {
+    const scriptPaths = {
+      awake: '/home/we/dust/code/awake/awake.lua',
+      onward: '/home/we/dust/code/onward_norns/onward_norns.lua'
+    };
+    if (!Object.hasOwn(scriptPaths, script)) throw new Error(`Unknown script: ${script}`);
+    if (script === 'onward' && !this.onwardDir && this.containerName) throw new Error('Onward source folder is unavailable');
     const startIndex = this.lines.length;
-    this.sendLua("norns.script.load('/home/we/dust/code/awake/awake.lua')");
+    this.sendLua(`norns.script.load(${JSON.stringify(scriptPaths[script])})`);
     await this.waitForLine(line => line.includes('# script init'), 30000, startIndex);
-    this.emit('status', { state: 'script-ready', script: 'awake' });
+    this.emit('status', { state: 'script-ready', script });
+  }
+
+  async loadAwake() {
+    await this.loadScript('awake');
+  }
+
+  async playTestTone() {
+    if (!this.containerName || !this.ready) throw new Error('Test tone requires a running Docker runtime');
+    await new Promise((resolve, reject) => {
+      const child = spawn(this.command, ['exec', '--user', 'we', this.containerName, '/usr/local/bin/norns-lab-tone'], { stdio: ['ignore', 'ignore', 'pipe'] });
+      let errors = '';
+      child.stderr.on('data', chunk => { errors += chunk; });
+      child.once('error', reject);
+      child.once('close', code => code === 0 ? resolve() : reject(new Error(`Test tone failed: ${errors.trim() || `exit ${code}`}`)));
+    });
   }
 
   async captureFrame({ timeoutMs = 3000 } = {}) {

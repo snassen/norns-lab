@@ -69,6 +69,12 @@ test('browser protocol drives norns controls and receives a fresh native frame',
     while (!audioChunks.length && Date.now() < audioDeadline) await new Promise(resolve => setTimeout(resolve, 10));
     assert.deepEqual(audioChunks[0], pcm);
     source.destroy();
+    ws.send(JSON.stringify({ type: 'load', script: 'onward' }));
+    const onwardDeadline = Date.now() + 1000;
+    while (!messages.some(message => message.type === 'status' && message.script === 'onward') && Date.now() < onwardDeadline) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.ok(messages.some(message => message.type === 'status' && message.script === 'onward'));
   } finally {
     ws.close();
     await app.close();

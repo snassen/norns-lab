@@ -25,9 +25,10 @@
         <button data-key="3">K3</button>
       </div>
     </section>
-    <div class="toolbar"><button id="load">Load Awake</button><button id="audio-toggle">Start Audio</button><span id="audio-status">Audio off</span></div>
+    <div class="toolbar"><label for="script">Script</label><select id="script"><option value="awake">Awake</option><option value="onward">Onward</option></select><button id="load">Load Script</button><button id="audio-toggle">Start Audio</button><button id="test-tone">Play Test Input</button><span id="audio-status">Audio off</span></div>
     <p class="help">Use − / + for one step. Scroll an encoder for one step per gesture. Hold a key for combinations.</p>
     <p id="error" role="alert"></p>
+    <details class="matron"><summary>Matron console</summary><p>Enter one line of Lua. It runs in this local norns session.</p><form id="matron-form"><input id="matron-code" aria-label="Matron Lua command" autocomplete="off" spellcheck="false" placeholder="onward_status()"><button type="submit">Run</button></form><pre id="matron-log" aria-live="polite"></pre></details>
   </main>
   <script type="module" src="/app.js"></script>
 </body>
