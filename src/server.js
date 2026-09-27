@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { parseClientMessage } from './protocol.js';
 import { Runtime } from './runtime.js';
+import { AudioBridge } from './audio-bridge.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(here, '../web');
 
-export function createAppServer({ runtime, frameDir, frameIntervalMs = 200 }) {
+export function createAppServer({ runtime, frameDir, audioBridge, frameIntervalMs = 200 }) {
   let scriptReady = false;
   let capturing = false;
   const clients = new Set();
@@ -20,7 +21,7 @@ export function createAppServer({ runtime, frameDir, frameIntervalMs = 200 }) {
 
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
-    const asset = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] }[pathname];
+    const asset = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/encoder-wheel.js': ['encoder-wheel.js', 'text/javascript'], '/audio-worklet.js': ['audio-worklet.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] }[pathname];
     const frame = pathname.match(/^\/frames\/(\d+)\.png$/);
     try {
       if (asset) {
@@ -49,9 +50,18 @@ export function createAppServer({ runtime, frameDir, frameIntervalMs = 200 }) {
     }
   });
   runtime.on('status', status => broadcast({ type: 'status', ...status }));
+  audioBridge?.on('status', status => broadcast({ type: 'audio-status', ...status }));
+  audioBridge?.on('pcm', chunk => {
+    for (const client of clients) {
+      if (client.audioEnabled && client.readyState === WebSocket.OPEN && client.bufferedAmount < 384000) {
+        client.send(chunk, { binary: true });
+      }
+    }
+  });
   wss.on('connection', client => {
     clients.add(client);
     client.send(JSON.stringify({ type: 'status', state: scriptReady ? 'script-ready' : 'ready' }));
+    client.send(JSON.stringify({ type: 'audio-status', connected: Boolean(audioBridge?.source) }));
     client.on('close', () => clients.delete(client));
     client.on('message', async raw => {
       try {
@@ -61,6 +71,9 @@ export function createAppServer({ runtime, frameDir, frameIntervalMs = 200 }) {
           scriptReady = true;
         } else if (message.type === 'inspect') {
           client.send(JSON.stringify({ type: 'state', ...await runtime.probeAwake() }));
+        } else if (message.type === 'audio') {
+          client.audioEnabled = message.enabled;
+          client.send(JSON.stringify({ type: 'audio-subscription', enabled: message.enabled }));
         } else {
           runtime.sendControl(message);
         }
@@ -100,18 +113,22 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const frameRoot = path.resolve(here, '../artifacts');
   await fs.mkdir(frameRoot, { recursive: true });
   const frameDir = await fs.mkdtemp(path.join(frameRoot, 'runtime-frames-'));
-  const runtime = new Runtime({ frameDir });
+  let runtime;
+  const audioBridge = new AudioBridge();
   let app;
   const shutdown = async () => {
     await app?.close();
-    await runtime.stop();
+    await runtime?.stop();
+    await audioBridge.close();
     await fs.rm(frameDir, { recursive: true, force: true });
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   try {
+    const audioAddress = await audioBridge.listen(0);
+    runtime = new Runtime({ frameDir, audioPort: audioAddress.port });
     await runtime.start();
-    app = createAppServer({ runtime, frameDir });
+    app = createAppServer({ runtime, frameDir, audioBridge });
     const address = await app.listen();
     console.log(`Norns Lab: http://127.0.0.1:${address.port}`);
   } catch (error) {

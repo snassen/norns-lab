@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { Runtime } from '../src/runtime.js';
+import { AudioBridge } from '../src/audio-bridge.js';
 import { createAppServer } from '../src/server.js';
 import { assertAwakeStates } from './scenario.mjs';
 
@@ -40,7 +41,53 @@ function inbox(ws) {
   };
 }
 
-export async function runAwakeScenario({ runtime, artifactRoot = path.join(root, 'artifacts') } = {}) {
+function wavFromFloatStereo(pcm) {
+  const frames = pcm.length / 8;
+  const wav = Buffer.alloc(44 + frames * 4);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(2, 22);
+  wav.writeUInt32LE(48000, 24);
+  wav.writeUInt32LE(48000 * 4, 28);
+  wav.writeUInt16LE(4, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(frames * 4, 40);
+  for (let index = 0; index < frames * 2; index++) {
+    const sample = Math.max(-1, Math.min(1, pcm.readFloatLE(index * 4)));
+    wav.writeInt16LE(Math.round(sample * (sample < 0 ? 32768 : 32767)), 44 + index * 2);
+  }
+  return wav;
+}
+
+function captureAwakeAudio(audioBridge, timeoutMs = 8000) {
+  const targetBytes = 48000 * 2 * 4;
+  return new Promise((resolve, reject) => {
+    let recording = false;
+    let bytes = 0;
+    const chunks = [];
+    const cleanup = () => { clearTimeout(timer); audioBridge.off('pcm', onPcm); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Awake audio was silent or missing')); }, timeoutMs);
+    const onPcm = chunk => {
+      if (!recording) {
+        for (let index = 0; index < chunk.length; index += 4) {
+          if (Math.abs(chunk.readFloatLE(index)) > 0.005) { recording = true; break; }
+        }
+        if (!recording) return;
+      }
+      const copy = Buffer.from(chunk.subarray(0, Math.min(chunk.length, targetBytes - bytes)));
+      chunks.push(copy);
+      bytes += copy.length;
+      if (bytes === targetBytes) { cleanup(); resolve(Buffer.concat(chunks)); }
+    };
+    audioBridge.on('pcm', onPcm);
+  });
+}
+
+export async function runAwakeScenario({ runtime, audioBridge, artifactRoot = path.join(root, 'artifacts') } = {}) {
   const runId = new Date().toISOString().replaceAll(/[:.]/g, '-');
   const artifactDir = path.join(artifactRoot, runId);
   await fs.mkdir(artifactDir, { recursive: true });
@@ -104,6 +151,20 @@ export async function runAwakeScenario({ runtime, artifactRoot = path.join(root,
     states.push(await waitState(state => state.mode === 1 && state.edit_ch === 2));
     await saveFrame(sequence);
     assertAwakeStates(states);
+    if (audioBridge) {
+      const pcm = await captureAwakeAudio(audioBridge);
+      let peak = 0;
+      let squareSum = 0;
+      for (let index = 0; index < pcm.length; index += 4) {
+        const value = pcm.readFloatLE(index);
+        peak = Math.max(peak, Math.abs(value));
+        squareSum += value * value;
+      }
+      const filename = 'awake-audio.wav';
+      await fs.writeFile(path.join(artifactDir, filename), wavFromFloatStereo(pcm));
+      report.audio = { filename, frames: pcm.length / 8, peak, rms: Math.sqrt(squareSum / (pcm.length / 4)) };
+      if (report.audio.rms < 0.001) throw new Error('Awake audio level too low');
+    }
     const runtimeError = runtime.lines.slice(loadLogIndex).find(line => /### SCRIPT ERROR|ERROR:/.test(line));
     if (runtimeError) throw new Error(`Awake runtime error: ${runtimeError}`);
     report.result = 'passed';
@@ -127,13 +188,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // Colima shares /Users with macOS, whereas a bind source in /var/folders
   // resolves only inside the Linux VM and its PNGs never reach this process.
   const frameDir = await fs.mkdtemp(path.join(frameRoot, 'runtime-frames-'));
+  const audioBridge = new AudioBridge();
   try {
-    const result = await runAwakeScenario({ runtime: new Runtime({ frameDir }) });
+    const audioAddress = await audioBridge.listen(0);
+    const result = await runAwakeScenario({ runtime: new Runtime({ frameDir, audioPort: audioAddress.port }), audioBridge });
     console.log(`Awake verification passed: ${result.artifactDir}`);
   } catch (error) {
     console.error(`Awake verification failed: ${error.message}`);
     process.exitCode = 1;
   } finally {
+    await audioBridge.close();
     await fs.rm(frameDir, { recursive: true, force: true });
   }
 }

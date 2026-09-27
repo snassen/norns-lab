@@ -82,9 +82,9 @@ done
 grep -Fq 'NORN_LAB_READY' "$runtime_log" || { cat "$runtime_log" >&2; exit 1; }
 
 # Export the actual final Crone JACK outputs only when a gateway supplies an
-# isolated TCP port. Smoke and unattended runner containers leave this unset,
-# so they can never steal a browser session's audio connection. The browser
-# gateway owns the receiver; the retry loop lets norns keep running if that
+# isolated TCP port. Smoke containers leave this unset, so they cannot steal
+# a browser session's audio connection. Each browser gateway or unattended
+# runner owns its own receiver; the retry loop lets norns keep running if that
 # receiver is refreshed or temporarily unavailable.
 audio_port="${NORN_LAB_AUDIO_PORT:-0}"
 if [[ "$audio_port" =~ ^[1-9][0-9]{0,4}$ ]] && (( audio_port <= 65535 )); then

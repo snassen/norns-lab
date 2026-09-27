@@ -20,6 +20,9 @@ export function parseClientMessage(raw) {
   if (message.type === 'load' && message.script === 'awake') {
     return { type: 'load', script: 'awake' };
   }
+  if (message.type === 'audio' && typeof message.enabled === 'boolean') {
+    return { type: 'audio', enabled: message.enabled };
+  }
   if (message.type === 'inspect') return { type: 'inspect' };
   throw new Error('Unsupported norns command or invalid control value');
 }

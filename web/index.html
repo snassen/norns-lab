@@ -15,9 +15,9 @@
     <section class="device" aria-label="Virtual norns">
       <div class="screen"><img id="screen" width="128" height="64" alt="Norns screen"></div>
       <div class="encoders">
-        <button data-encoder="1" aria-label="Encoder 1">E1</button>
-        <button data-encoder="2" aria-label="Encoder 2">E2</button>
-        <button data-encoder="3" aria-label="Encoder 3">E3</button>
+        <div class="encoder-control"><button class="step" data-encoder-step="1" data-delta="-1" aria-label="Encoder 1 decrease">−</button><button data-encoder="1" aria-label="Encoder 1">E1</button><button class="step" data-encoder-step="1" data-delta="1" aria-label="Encoder 1 increase">+</button></div>
+        <div class="encoder-control"><button class="step" data-encoder-step="2" data-delta="-1" aria-label="Encoder 2 decrease">−</button><button data-encoder="2" aria-label="Encoder 2">E2</button><button class="step" data-encoder-step="2" data-delta="1" aria-label="Encoder 2 increase">+</button></div>
+        <div class="encoder-control"><button class="step" data-encoder-step="3" data-delta="-1" aria-label="Encoder 3 decrease">−</button><button data-encoder="3" aria-label="Encoder 3">E3</button><button class="step" data-encoder-step="3" data-delta="1" aria-label="Encoder 3 increase">+</button></div>
       </div>
       <div class="keys">
         <button data-key="1">K1</button>
@@ -25,7 +25,8 @@
         <button data-key="3">K3</button>
       </div>
     </section>
-    <div class="toolbar"><button id="load">Load Awake</button><span>Scroll an encoder to turn it. Hold a key for combinations.</span></div>
+    <div class="toolbar"><button id="load">Load Awake</button><button id="audio-toggle">Start Audio</button><span id="audio-status">Audio off</span></div>
+    <p class="help">Use − / + for one step. Scroll an encoder for one step per gesture. Hold a key for combinations.</p>
     <p id="error" role="alert"></p>
   </main>
   <script type="module" src="/app.js"></script>

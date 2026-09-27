@@ -11,6 +11,7 @@ test('accepts signed encoder steps and Awake load', () => {
   assert.deepEqual(parseClientMessage('{"type":"encoder","n":1,"delta":-1}'), { type: 'encoder', n: 1, delta: -1 });
   assert.deepEqual(parseClientMessage('{"type":"load","script":"awake"}'), { type: 'load', script: 'awake' });
   assert.deepEqual(parseClientMessage('{"type":"inspect"}'), { type: 'inspect' });
+  assert.deepEqual(parseClientMessage('{"type":"audio","enabled":true}'), { type: 'audio', enabled: true });
 });
 
 test('rejects invalid control numbers, values and extra commands', () => {
@@ -22,6 +23,7 @@ test('rejects invalid control numbers, values and extra commands', () => {
     '{"type":"encoder","n":1,"delta":1.5}',
     '{"type":"encoder","n":1,"delta":1000}',
     '{"type":"load","script":"../../other"}',
+    '{"type":"audio","enabled":"yes"}',
     '{"type":"eval","code":"os.execute(1)"}',
     'garbage'
   ]) assert.throws(() => parseClientMessage(message));

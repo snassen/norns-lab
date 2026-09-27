@@ -12,12 +12,13 @@ const completePng = data => data?.length >= 36
   && data.subarray(-12).equals(pngEnd);
 
 export class Runtime extends EventEmitter {
-  constructor({ command = 'docker', args, frameDir, containerFrameDir = '/frames', startupTimeoutMs = 30000 } = {}) {
+  constructor({ command = 'docker', args, frameDir, containerFrameDir = '/frames', startupTimeoutMs = 30000, audioPort = 0 } = {}) {
     super();
     if (!frameDir) throw new Error('frameDir is required');
+    if (!Number.isInteger(audioPort) || audioPort < 0 || audioPort > 65535) throw new Error('Invalid audio receiver port');
     this.command = command;
     this.containerName = args ? null : `norns-lab-${randomUUID()}`;
-    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', '-v', `${frameDir}:/frames`, 'norns-lab-runtime'];
+    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', '-e', `NORN_LAB_AUDIO_PORT=${audioPort}`, '-v', `${frameDir}:/frames`, 'norns-lab-runtime'];
     this.frameDir = frameDir;
     this.containerFrameDir = containerFrameDir;
     this.startupTimeoutMs = startupTimeoutMs;
