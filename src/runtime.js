@@ -111,10 +111,11 @@ export class Runtime extends EventEmitter {
     await this.loadScript('awake');
   }
 
-  async playTestTone() {
+  async playTestTone({ frequency = 440, toneMs = 500, totalMs = 2000 } = {}) {
     if (!this.containerName || !this.ready) throw new Error('Test tone requires a running Docker runtime');
+    if (![frequency, toneMs, totalMs].every(Number.isInteger)) throw new Error('Invalid test tone arguments');
     await new Promise((resolve, reject) => {
-      const child = spawn(this.command, ['exec', '--user', 'we', this.containerName, '/usr/local/bin/norns-lab-tone'], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = spawn(this.command, ['exec', '--user', 'we', this.containerName, '/usr/local/bin/norns-lab-tone', String(frequency), String(toneMs), String(totalMs)], { stdio: ['ignore', 'ignore', 'pipe'] });
       let errors = '';
       child.stderr.on('data', chunk => { errors += chunk; });
       child.once('error', reject);

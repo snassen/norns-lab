@@ -48,6 +48,25 @@ function recordAudibleSecond(bridge) {
   });
 }
 
+async function waitForQuietBaseline(bridge) {
+  let quietWindows = 0;
+  const deadline = Date.now() + 20000;
+  while (quietWindows < 2 && Date.now() < deadline) {
+    const chunks = [];
+    const onPcm = chunk => chunks.push(Buffer.from(chunk));
+    bridge.on('pcm', onPcm);
+    await delay(1000);
+    bridge.off('pcm', onPcm);
+    const pcm = Buffer.concat(chunks);
+    if (!pcm.length) throw new Error('Onward audio stream is missing');
+    let square = 0;
+    for (let offset = 0; offset < pcm.length; offset += 4) square += pcm.readFloatLE(offset) ** 2;
+    const rms = Math.sqrt(square / (pcm.length / 4));
+    quietWindows = rms < 0.0005 ? quietWindows + 1 : 0;
+  }
+  if (quietWindows < 2) throw new Error('Norns startup audio did not settle to silence');
+}
+
 export async function runOnwardScenario({ onwardDir = process.env.NORN_LAB_ONWARD_DIR || path.resolve(root, '../onward-norns'), artifactRoot = path.join(root, 'artifacts') } = {}) {
   await fs.access(path.join(onwardDir, 'onward_norns.lua'));
   await fs.access(path.join(onwardDir, 'lib/Engine_OnwardGrain.sc'));
@@ -101,6 +120,7 @@ export async function runOnwardScenario({ onwardDir = process.env.NORN_LAB_ONWAR
     report.pages.push(nextPage);
     sequence = await saveFrame('onward-freeze.png', sequence);
     if (report.pages[0] !== 1 || report.pages[1] !== 2) throw new Error(`Onward page change failed: ${report.pages}`);
+    await waitForQuietBaseline(bridge);
     const audio = recordAudibleSecond(bridge);
     const tone = runtime.playTestTone();
     [report.audio] = await Promise.all([audio, tone]);

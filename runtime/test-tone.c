@@ -1,12 +1,16 @@
 #include <jack/jack.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 static jack_port_t *left_port;
 static jack_port_t *right_port;
 static jack_nframes_t rate;
 static volatile jack_nframes_t written;
+static int frequency = 440;
+static int tone_ms = 500;
+static int total_ms = 2000;
 
 static int render(jack_nframes_t frames, void *unused) {
   (void)unused;
@@ -14,8 +18,8 @@ static int render(jack_nframes_t frames, void *unused) {
   jack_default_audio_sample_t *right = jack_port_get_buffer(right_port, frames);
   for (jack_nframes_t i = 0; i < frames; ++i) {
     const jack_nframes_t at = written + i;
-    const float sample = at >= rate / 4 && at < rate * 3 / 4
-      ? 0.12f * sinf(2.0f * 3.14159265358979323846f * 440.0f * (float)at / (float)rate)
+    const float sample = at >= rate / 4 && at < rate / 4 + rate * tone_ms / 1000
+      ? 0.12f * sinf(2.0f * 3.14159265358979323846f * (float)frequency * (float)at / (float)rate)
       : 0.0f;
     left[i] = sample;
     right[i] = sample;
@@ -24,7 +28,15 @@ static int render(jack_nframes_t frames, void *unused) {
   return 0;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  if (argc > 1) frequency = atoi(argv[1]);
+  if (argc > 2) tone_ms = atoi(argv[2]);
+  if (argc > 3) total_ms = atoi(argv[3]);
+  if (frequency < 55 || frequency > 4000 || tone_ms < 50 || tone_ms > 5000 ||
+      total_ms < tone_ms + 500 || total_ms > 10000) {
+    fprintf(stderr, "Usage: norns-lab-tone [frequency 55-4000] [tone_ms 50-5000] [total_ms > tone_ms+500, <=10000]\n");
+    return 2;
+  }
   jack_status_t status;
   jack_client_t *client = jack_client_open("norns-lab-tone", JackNoStartServer, &status);
   if (!client) { fprintf(stderr, "Could not open JACK client: %u\n", status); return 1; }
@@ -42,7 +54,7 @@ int main(void) {
     jack_client_close(client);
     return 1;
   }
-  while (written < rate * 2) usleep(10000);
+  while (written < rate * total_ms / 1000) usleep(10000);
   jack_client_close(client);
   return 0;
 }

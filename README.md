@@ -1,6 +1,6 @@
 # Norns Lab
 
-Norns Lab runs the upstream norns application and an unmodified, pinned copy of Awake in an ARM64 Linux container. A local browser displays norns' native 128 × 64 framebuffer, plays its stereo audio, and sends K1–K3 and E1–E3 input through norns' own key and encoder callbacks. An unattended scenario checks Awake's state and audio, then saves frames, a short WAV, and the runtime log.
+Norns Lab runs the upstream norns application and an unmodified, pinned copy of Awake in an ARM64 Linux container. It can also mount a local Onward script read-only. A local browser displays norns' native 128 × 64 framebuffer, plays its stereo audio, and sends K1–K3 and E1–E3 input through norns' own key and encoder callbacks. Unattended scenarios check state and audio, then save frames, WAV files, and runtime logs.
 
 This is the first working slice toward a broader norns emulator. The browser and scenario use a small protocol that can later connect to a Raspberry Pi OS backend. The current backend runs norns natively on ARM64 Linux; it does not boot a Raspberry Pi OS image. It runs the real Matron script loader and console.
 
@@ -22,9 +22,10 @@ npm ci
 npm test
 npm run verify:awake
 npm run verify:onward
+npm run evaluate:onward
 ```
 
-The smoke command builds the `norns-lab-runtime` image and checks the real norns services. `npm run verify:awake` launches a fresh container, loads Awake, sends controls over the same gateway used by the browser, checks Awake's actual Lua state and non-silent audio, and writes a timestamped run to `artifacts/`. `npm run verify:onward` loads the sibling `onward-norns` source folder read-only, changes pages, sends a 440 Hz test note to norns' JACK inputs, and checks that both channels select sound and the output is non-silent. Both commands return nonzero on failure and save a report, runtime log, and PNG frames under `artifacts/`.
+The smoke command builds the `norns-lab-runtime` image and checks the real norns services. `npm run verify:awake` launches a fresh container, loads Awake, sends controls over the same gateway used by the browser, checks Awake's actual Lua state and non-silent audio, and writes a timestamped run to `artifacts/`. `npm run verify:onward` loads the sibling `onward-norns` source folder read-only, changes pages, sends a 440 Hz test note to norns' JACK inputs, and checks that both channels select sound and the output is non-silent. It waits for norns' startup sound to decay before measuring the note. `npm run evaluate:onward` tests automatic and manual capture, independent locks, held audio across new input, and Freeze-to-Glitch routing. It saves a JSON assessment, WAVs, and runtime logs in a timestamped `artifacts/onward-evaluation-*` folder. A false assessment field is a measured behavior gap and makes the command exit nonzero, so an unattended run catches it. These checks use synthetic notes; they do not establish a sonic match with the physical pedal.
 
 ## Browser
 
