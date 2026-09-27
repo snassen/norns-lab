@@ -5,7 +5,7 @@ ARG NORNS_REV=42df84420774ef4d0961cf37946ed30e4078920f
 ARG AWAKE_REV=73d4accfc090aaab58f1586eaf4d9cf54d3cff01
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential ca-certificates cmake curl git iproute2 jackd2 \
+    build-essential ca-certificates cmake curl ffmpeg git iproute2 jackd2 \
     libasound2-dev libavahi-compat-libdnssd-dev libcairo2-dev libevdev-dev \
     libgpiod-dev libjack-jackd2-dev liblo-dev liblua5.3-dev libncurses5-dev \
     libncursesw5-dev libreadline-dev libsndfile1-dev libsdl2-dev libudev-dev \

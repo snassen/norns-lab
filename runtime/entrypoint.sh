@@ -20,6 +20,8 @@ mkfifo "$input_fifo"
 cleanup() {
   trap - EXIT INT TERM
   [[ -n "${forward_pid:-}" ]] && kill "$forward_pid" 2>/dev/null || true
+  [[ -n "${audio_connect_pid:-}" ]] && kill "$audio_connect_pid" 2>/dev/null || true
+  [[ -n "${audio_pid:-}" ]] && kill "$audio_pid" 2>/dev/null || true
   [[ -n "${norns_pid:-}" ]] && kill "$norns_pid" 2>/dev/null || true
   [[ -n "${sclang_pid:-}" ]] && kill "$sclang_pid" 2>/dev/null || true
   [[ -n "${jack_pid:-}" ]] && kill "$jack_pid" 2>/dev/null || true
@@ -78,6 +80,46 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 grep -Fq 'NORN_LAB_READY' "$runtime_log" || { cat "$runtime_log" >&2; exit 1; }
+
+# Export the actual final Crone JACK outputs only when a gateway supplies an
+# isolated TCP port. Smoke and unattended runner containers leave this unset,
+# so they can never steal a browser session's audio connection. The browser
+# gateway owns the receiver; the retry loop lets norns keep running if that
+# receiver is refreshed or temporarily unavailable.
+audio_port="${NORN_LAB_AUDIO_PORT:-0}"
+if [[ "$audio_port" =~ ^[1-9][0-9]{0,4}$ ]] && (( audio_port <= 65535 )); then
+  audio_log=/tmp/norns-lab-audio.log
+  (
+    while true; do
+      ffmpeg -hide_banner -loglevel warning \
+        -f jack -ac 2 -i norns-lab-capture \
+        -ac 2 -ar 48000 -f f32le "tcp://host.docker.internal:${audio_port}" >>"$audio_log" 2>&1 || true
+      sleep 1
+    done
+  ) &
+  audio_pid=$!
+  (
+    while kill -0 "$audio_pid" 2>/dev/null; do
+      if jack_lsp | grep -Fxq 'crone:output_1' \
+        && jack_lsp | grep -Fxq 'crone:output_2' \
+        && jack_lsp | grep -Fxq 'norns-lab-capture:input_1' \
+        && jack_lsp | grep -Fxq 'norns-lab-capture:input_2'; then
+        if ! jack_lsp -c crone:output_1 | grep -Fq 'norns-lab-capture:input_1' \
+          || ! jack_lsp -c crone:output_2 | grep -Fq 'norns-lab-capture:input_2'; then
+          jack_connect crone:output_1 norns-lab-capture:input_1 2>/dev/null || true
+          jack_connect crone:output_2 norns-lab-capture:input_2 2>/dev/null || true
+          printf 'SMOKE_AUDIO_CAPTURE_CONNECTED\n'
+        fi
+        # The connection survives while this ffmpeg process remains alive. Poll
+        # for a newly-created client after a receiver restart.
+        sleep 0.5
+      else
+        sleep 0.1
+      fi
+    done
+  ) &
+  audio_connect_pid=$!
+fi
 
 # `NORN_LAB_READY` comes from matron itself, after its stdin input thread is live.
 # The gateway can now write Lua lines and request native PNG exports through stdin.
