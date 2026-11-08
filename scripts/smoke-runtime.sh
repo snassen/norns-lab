@@ -55,7 +55,9 @@ test "$(docker run --rm --user we --entrypoint git "$image" -C /home/we/dust/cod
 docker run --rm --user we --entrypoint /home/we/norns/build/norns/norns "$image" --check | grep -Fq 'norns: --check ok'
 
 log="$frames/runtime.log"
+# See REALTIME_AUDIO_ARGS in src/runtime.js; jackd needs these in Docker on a Pi.
 run_bounded 45 docker run --platform linux/arm64 --rm -i \
+  --shm-size=256m --ulimit memlock=-1:-1 --ulimit rtprio=95 --cap-add SYS_NICE \
   -e NORN_LAB_EOF_GRACE_SECONDS=25 \
   -v "$frames:/frames" "$image" >"$log" 2>&1 <<'LUA'
 print("SMOKE_REPL_READY")

@@ -5,6 +5,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 
+// JACK needs more shared memory than Docker's 64 MB default and permission to
+// lock memory and use realtime priority. Without these jackd dies with a bus
+// error on a Raspberry Pi 5 (Debian trixie, Docker 26).
+export const REALTIME_AUDIO_ARGS = ['--shm-size=256m', '--ulimit', 'memlock=-1:-1', '--ulimit', 'rtprio=95', '--cap-add', 'SYS_NICE'];
+
 const pngHeader = Buffer.from('89504e470d0a1a0a', 'hex');
 const pngEnd = Buffer.from('0000000049454e44ae426082', 'hex');
 const completePng = data => data?.length >= 36
@@ -19,7 +24,7 @@ export class Runtime extends EventEmitter {
     this.command = command;
     this.onwardDir = onwardDir;
     this.containerName = args ? null : `norns-lab-${randomUUID()}`;
-    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', '-e', `NORN_LAB_AUDIO_PORT=${audioPort}`, '-v', `${frameDir}:/frames`, ...(onwardDir ? ['-v', `${onwardDir}:/home/we/dust/code/onward_norns:ro`] : []), 'norns-lab-runtime'];
+    this.args = args ?? ['run', '--name', this.containerName, '-i', '--rm', ...REALTIME_AUDIO_ARGS, '-e', `NORN_LAB_AUDIO_PORT=${audioPort}`, '-v', `${frameDir}:/frames`, ...(onwardDir ? ['-v', `${onwardDir}:/home/we/dust/code/onward_norns:ro`] : []), 'norns-lab-runtime'];
     this.frameDir = frameDir;
     this.containerFrameDir = containerFrameDir;
     this.startupTimeoutMs = startupTimeoutMs;
