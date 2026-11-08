@@ -20,6 +20,7 @@ mkfifo "$input_fifo"
 cleanup() {
   trap - EXIT INT TERM
   [[ -n "${forward_pid:-}" ]] && kill "$forward_pid" 2>/dev/null || true
+  [[ -n "${post_ready_pid:-}" ]] && kill "$post_ready_pid" 2>/dev/null || true
   [[ -n "${audio_connect_pid:-}" ]] && kill "$audio_connect_pid" 2>/dev/null || true
   [[ -n "${audio_pid:-}" ]] && kill "$audio_pid" 2>/dev/null || true
   [[ -n "${norns_pid:-}" ]] && kill "$norns_pid" 2>/dev/null || true
@@ -29,7 +30,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-jackd -d dummy -r 48000 -p 1024 >/tmp/norns-lab-jack.log 2>&1 &
+# Hosts that bridge audio in small blocks (Machinista) set a shorter period.
+jack_period="${NORN_LAB_JACK_PERIOD:-1024}"
+[[ "$jack_period" =~ ^[0-9]+$ ]] || jack_period=1024
+jackd -d dummy -r 48000 -p "$jack_period" >/tmp/norns-lab-jack.log 2>&1 &
 jack_pid=$!
 for _ in $(seq 1 100); do
   jack_lsp >/dev/null 2>&1 && break
@@ -80,6 +84,15 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 grep -Fq 'NORN_LAB_READY' "$runtime_log" || { cat "$runtime_log" >&2; exit 1; }
+
+# An optional host-supplied hook (for example Machinista's audio bridge) starts
+# once norns is ready and is stopped with the container.
+post_ready="${NORN_LAB_POST_READY:-}"
+if [[ -n "$post_ready" && -x "$post_ready" ]]; then
+  "$post_ready" >/tmp/norns-lab-post-ready.log 2>&1 &
+  post_ready_pid=$!
+  printf 'SMOKE_POST_READY_STARTED\n'
+fi
 
 # Export the actual final Crone JACK outputs only when a gateway supplies an
 # isolated TCP port. Smoke containers leave this unset, so they cannot steal
