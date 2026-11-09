@@ -46,3 +46,7 @@ Pinned revisions are in [runtime/versions.json](runtime/versions.json). The imag
 The current acceptance check covers the framebuffer, key and encoder routing, script lifecycle, PolyPerc startup, softcut availability, and non-silent stereo audio from Crone. It does not judge musical sound quality or measure end-to-end audio latency. Grid, arc, MIDI, and GPIO are later work. The connected physical shield is not part of this test and is never written to by these commands.
 
 See [the design](docs/superpowers/specs/2026-09-26-norns-emulator-design.md) for the backend boundary and future Raspberry Pi OS path.
+
+## License
+
+Norns Lab is released under the GNU General Public License, version 3 or later (see `LICENSE`), the same license as [norns](https://github.com/monome/norns). Scripts it loads, such as Awake, keep their own licenses.
